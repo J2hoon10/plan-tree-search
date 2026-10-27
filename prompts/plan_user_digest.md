@@ -44,4 +44,4 @@ Always read the OUTPUT TEXT, never rc alone: `cmd || echo ...` and `2>/dev/null`
 failure show rc=0. If the text says "No response" / "failed" though rc=0, record that absence in learned.
 
 Keep EVERY field to one line. State only the facts the output actually shows; do NOT recommend a
-next action — only record what happened. Never invent a result that is not there.
+next action — only record what happened.
