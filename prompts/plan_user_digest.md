@@ -15,29 +15,30 @@ Output ONE JSON object with these fields (the <...> says what each field holds; 
 
 Pick the verdict by asking these THREE questions IN ORDER. Use the FIRST one that matches.
 
-1. BLOCKED — did the TOOL run? (NO -> BLOCKED)
-   The program was missing or not executable (rc 127 / 126). The command never produced a result.
-   BLOCKED is about the TOOL, NOT the network. An ssh / curl / nc that runs and then reports
-   "No route to host", "could not resolve", "connection refused", or "network is unreachable"
-   DID run — it is NOT BLOCKED (that is a RAN_OK absence). A timeout (rc 124) is NOT BLOCKED either:
-   the command ran but was too slow -> BAD_CMD.
+1. BLOCKED — the program itself never started. (YES -> BLOCKED)
+   The shell could not launch the command, so there is NO result about your task. Exactly two cases:
+   - "command not found" / rc 127  — the program is not installed here, or
+   - "not executable" / "permission denied" ON THE PROGRAM / rc 126.
+   That is the whole list for BLOCKED.
 
-2. BAD_CMD — it ran, but did it do what you INTENDED? (NO -> BAD_CMD)
-   The command executed but acted on something OTHER than what "intended" describes, so its result
-   cannot answer your question. The fix is to REWRITE the command; the environment is fine. Tells
-   (any one is enough):
-   - a literal you wrote is still in the output verbatim (a `{...}` range, a `$var`) -> it never expanded;
-   - a substituted value is the WRONG KIND for the goal — e.g. you meant to reach a network address
-     but the output shows it contacting a bare number like `10` instead of a full dotted address
-     `10.x.x.x`, or a path fragment instead of a full path;
-   - it returned in under ~0.1s (it never really tried), or it timed out (rc 124 — too slow);
-   - the number of output lines is far from what the command should have produced.
+2. BAD_CMD — the command ran, but acted on something OTHER than your intent. (YES -> BAD_CMD)
+   Its result answers a different question than the one "intended" asked, so REWRITE the command
+   (the environment is fine). Any one of these signs means BAD_CMD:
+   - a literal you wrote is still sitting in the output (a `{...}` range, a `$var`) — the shell
+     passed it through as text instead of expanding it;
+   - a substituted value is the WRONG KIND for the goal — you aimed at a network address but it
+     contacted a bare number like `10` instead of a full dotted address `10.x.x.x`, or a path
+     fragment instead of a full path;
+   - it returned in under ~0.1s (too fast to have done the work), or it timed out (rc 124, too slow);
+   - the output has far more or far fewer lines than this command should produce.
 
-3. RAN_OK — otherwise.
-   The command ran and its result is TRUSTWORTHY. This covers BOTH a fact you found (a path, an
-   address, an identity, a file/directory/host that exists) AND a trustworthy ABSENCE (an empty
-   listing, no match, a host that is simply not there) — an absence is also a fact that narrows the
-   search. Put what you established in "learned" (e.g. "no key in ~/.ssh", "self ip 10.77.1.2/28").
+3. RAN_OK — the command ran and its result is TRUSTWORTHY. (YES -> RAN_OK)
+   You got a real answer about your task, and it is one of two kinds:
+   - a FACT you found: a path, an address, an identity, a file/directory/host that exists; or
+   - a trustworthy ABSENCE: an empty listing, "no match", a host that is not there, a name that
+     does not resolve. An absence is also a fact — it rules a place out and tells you where to go next.
+   Put what you established in "learned" (e.g. "no key in ~/.ssh", "self ip 10.77.1.2/28",
+   "target-node has no DNS name, must find its IP").
 
 Always read the OUTPUT TEXT, never rc alone: `cmd || echo ...` and `2>/dev/null` can make a real
 failure show rc=0. If the text says "No response" / "failed" though rc=0, record that absence in learned.
