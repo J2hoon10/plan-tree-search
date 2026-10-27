@@ -1,6 +1,6 @@
 # Verdict → 트리 동작 매핑 설계 (verdict-driven rollback)
 
-작성 대상: 이 변경을 구현할 사람(설계 논의 중인 본인 / 후속 세션). 상태: **설계 확정, 미구현**. 2026-10-27.
+작성 대상: 이 변경을 구현할 사람(설계 논의 중인 본인 / 후속 세션). 상태: **1단계 구현 완료 (as-built 반영)**. 2026-10-27. (구현: loop.py verdict 분기 + run_candidates.fix_command/gen(exclude) + executor.prepare_one/dead_methods + plan_user_cmdfix.md + digest.jsonl `retry` 인덱스. coverage/fact_kind·command_kind deadend·run.json method_dead 영속화는 보류.)
 
 목적: digest의 `verdict`를 탐색 트리의 **전진/롤백 트리거**로 연결해, "구조는 있으나 거의 안 걸리는" 롤백을 실제로 작동시킨다. verdict는 **단일 스텝 판단**(RAN_OK/BAD_CMD/BLOCKED)만 맡고, "계획 변경"은 **coverage 배제 + 롤백**이라는 트리 구조가 처리한다.
 
@@ -167,10 +167,10 @@ while steps_used < max_steps:
   "note":    str }  # RAN_OK 아니면 무엇이 틀렸나(사실만)
 ```
 
-### 6.2 deadend — scope 구분 (중요)
-- **method_kinds = run 전역**: 도구 없음은 **에피소드 전체** 속성(5번 스텝에 ping 없으면 30번에도 없음). BLOCKED가 등록 → 이후 **모든 gen에서 제외**. → `run.json` 최상위 `method_kinds_dead: [str]`. (환경은 run 내 불변이라 "나중에 쓸 수 있는데 막힘" 문제 없음.)
-- **command deadend(BAD_CMD) = 보류**: ⚠️ 리터럴 추상화 `command_kind`는 **교정본까지 막는다**(`ssh target@<ip>` 서명이 깨진 것·고친 것을 동일시) → 1단계 제외. 대신 **fix_command에 "이 depth에서 이미 시도한 정확한 명령 문자열"만 넘겨 반복 방지** + `RETRY_MAX`.
-- step 레벨엔 `retry_count: int`(이 depth BAD_CMD 교정 횟수)만.
+### 6.2 deadend / fix 기록 (as-built)
+- **method deadend = run 전역, in-memory**: `loop.run`의 `method_dead` 리스트. BLOCKED 시 [executor.dead_methods](../scripts/executor.py#L162)(stderr의 `X: command not found` 우선, 없으면 `errorfilter.programs(cmd)[:1]`)로 뽑아 등록 → 이후 모든 `gen(exclude=method_dead)`에서 제외. **run.json에 영속화는 안 함**(환경은 run 내 불변이라 재구성 불필요 — 원안의 최상위 `method_kinds_dead` 필드는 미채택).
+- **command deadend(BAD_CMD) = 보류**(원안대로): ⚠️ 리터럴 추상화 `command_kind`는 **교정본까지 막는다**(`ssh target@<ip>` 서명이 깨진 것·고친 것을 동일시) → 1단계 제외. 대신 **fix_command에 `fix_attempts`(이 depth에서 이미 실패한 정확한 명령 + note)를 넘겨 반복 방지** + `RETRY_MAX`.
+- **step.`fix_attempts`: [{cmd, note}]** — 이 depth의 BAD_CMD 실패 시도를 loop이 적재(`retry_count` = 그 길이, 별도 필드 없음). `*.digest.jsonl`은 시도마다 1줄, **`retry` 인덱스**(0=첫 시도)로 같은 depth 재실행을 구분.
 - 기존 `tried_candidate_ids`(id 단위 롤백 장부)는 유지 — deadend와 별개 축.
 
 ### 6.3 run 전역 — 추가
@@ -227,14 +227,15 @@ verdict에 "replan"을 넣지 않는다. 대신:
 - **조기 exhausted**: 롤백이 자주 걸리면 미시도 후보 소진이 빨라짐 → 깊이당 후보 수/budget 재점검.
 - **deadend/coverage 과배제**: method_kind를 너무 넓게(예: `ssh` 통째) 잡으면 정답 경로 차단; fact_kind를 너무 넓게 잡으면 필요한 재관찰까지 금지. → 입도 신중.
 
-## 11. 변경 파일 (예정)
-- `scripts/run_digest.py` — enum 3개.
-- `prompts/plan_user_digest.md` — RAN_OK 병합 반영.
-- (신규) `prompts/plan_user_cmdfix.md` + `fix_command` 호출 — BAD_CMD 전용 명령교정.
-- `scripts/loop.py` — §5 to-be(verdict 분기, FIX 미니루프, retries/covered, do_rollback).
-- `scripts/runlog.py` — step `retry_count`/`deadends`, run `covered`.
-- `scripts/run_candidates.py` — gen에 `exclude`(deadend+covered) 인자.
-- (신규) move/fact KIND 정규화 유틸.
+## 11. 변경 파일 (1단계 — 구현 완료 ✅)
+- ✅ `scripts/run_digest.py` — enum 3개 + `_enforce_rc_floor`(rc126/127→BLOCKED, 124→BAD_CMD).
+- ✅ `prompts/plan_user_digest.md` — RAN_OK 병합 + 순서형 TF 사다리.
+- ✅ (신규) `prompts/plan_user_cmdfix.md` + `run_candidates.fix_command` — BAD_CMD 전용 명령교정.
+- ✅ `scripts/loop.py` — verdict 분기(RAN_OK 전진 / BAD_CMD FIX 미니루프 / BLOCKED 롤백) + `method_dead` + digest `retry` 인덱스.
+- ✅ `scripts/runlog.py` — step `fix_attempts`(=retry_count), 기존 `rollback()` 재사용.
+- ✅ `scripts/run_candidates.py` — `gen(exclude=)` + `fix_command`.
+- ✅ `scripts/executor.py` — `prepare_one`, `dead_methods`.
+- ⏸ 보류: coverage(`run.covered`)·fact_kind·command_kind 정규화 — §8 측정 후 결정.
 
 ---
 

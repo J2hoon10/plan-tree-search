@@ -159,11 +159,16 @@ def prepare_one(run_path, depth, candidate_id, new_cmd):
 _NOTFOUND_RE = re.compile(r"([^\s:/]+): command not found")
 
 
-def dead_methods(cmd, stderr):
+def dead_methods(cmd, stderr, rc=None):
     """Program name(s) that could not run, for the run-wide method deadend on BLOCKED. Prefer the
     shell's own 'X: command not found' (catches a program buried inside a loop, where programs()
-    only sees the loop keyword); else fall back to the primary program word."""
-    return _NOTFOUND_RE.findall(stderr or "") or errorfilter.programs(cmd)[:1]
+    only sees the loop keyword). Fall back to the primary program word ONLY for a genuine tool
+    failure (rc 126/127); a BAD_CMD promoted to BLOCKED (wrong value, not a missing tool) must NOT
+    blame its working program, or it would poison every future gen."""
+    found = _NOTFOUND_RE.findall(stderr or "")
+    if found:
+        return found
+    return errorfilter.programs(cmd)[:1] if rc in (126, 127) else []
 
 
 def execute_one(run_path, depth, candidate_id, env_exec=local_env_exec):

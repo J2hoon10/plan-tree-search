@@ -18,15 +18,17 @@ from pathlib import Path
 import exputil, rank_candidates, run_candidates, run_digest, executor, runlog
 
 
-def _make_digest(model, run_name, run_path, rl, depth, candidate_id, seed):
+def _make_digest(model, run_name, run_path, rl, depth, candidate_id, seed, retry=0):
     """4th phase: distill the just-executed step into a compact digest, store it on the step,
-    and append it to the post-hoc analysis log (*.digest.jsonl). Best-effort — run_digest.gen
-    already falls back to a code-only digest if the model call fails, so this never crashes."""
+    and append it to the post-hoc analysis log (*.digest.jsonl). `retry` = this depth's BAD_CMD
+    fix index (0 = first attempt), so re-executions at the same depth stay distinguishable in the
+    log. Best-effort — run_digest.gen already falls back to a code-only digest if the model call
+    fails, so this never crashes."""
     digest = run_digest.gen(model, run_name, depth, candidate_id, seed=seed)
     rl.attach_digest(depth, digest)
     p = run_path.parent / (run_path.stem + ".digest.jsonl")
     with open(p, "a") as f:
-        f.write(json.dumps({"depth": depth, "candidate_id": candidate_id, **digest},
+        f.write(json.dumps({"depth": depth, "retry": retry, "candidate_id": candidate_id, **digest},
                            ensure_ascii=False) + "\n")
     print(f"[iter] d{depth} digest: verdict={digest.get('verdict')}", flush=True)
     return digest
@@ -85,7 +87,7 @@ def run(model, run_name, max_steps=40, seed=1, temp=0.7, env_exec=None, env_labe
 
         # --- EXEC: run the chosen plan, distill it, branch on the verdict ---
         rl = executor.execute_one(run_name, depth, chosen, env_exec=env_exec)
-        digest = _make_digest(model, run_name, run_path, rl, depth, chosen, seed)
+        digest = _make_digest(model, run_name, run_path, rl, depth, chosen, seed, retry=len(history))
         v = digest.get("verdict")
         st = rl.step(depth)
         print(f"[iter {it}] depth {depth}: executed c{chosen} (order {st.get('ranking_order')}) -> {v}",
@@ -108,12 +110,17 @@ def run(model, run_name, max_steps=40, seed=1, temp=0.7, env_exec=None, env_labe
                 executor.prepare_one(run_name, depth, chosen, new)
                 mode = "EXEC"; continue                  # re-run same intent at this depth
             v = "BLOCKED"                                 # out of fixes -> abandon this intent
+            d = st["digest"]; d["verdict"] = "BLOCKED"    # record the promotion so run.json matches the loop
+            d["note"] = (d.get("note") or "") + f" [promoted from BAD_CMD: unfixable after {BAD_CMD_RETRY_MAX} tries]"
+            rl.save()
 
         if v == "BLOCKED":
             cand = rl._cand(depth, chosen)
-            for m in executor.dead_methods(cand["cmd"], (cand.get("exec") or {}).get("stderr", "")):
+            ex = cand.get("exec") or {}
+            for m in executor.dead_methods(cand["cmd"], ex.get("stderr", ""), ex.get("rc")):
                 if m not in method_dead:
                     method_dead.append(m)
+            rl.data["method_dead"] = list(method_dead); rl.save()   # persist for post-hoc analysis
             resume = rl.rollback(depth)
             if resume is None:
                 status = "exhausted"; break
