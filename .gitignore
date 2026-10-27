@@ -1,0 +1,9 @@
+# experiment outputs (regenerated; large; and *_secret holds ground truth + private keys)
+out/
+
+# python
+__pycache__/
+*.pyc
+
+# session backups
+*.bak_*
