@@ -34,7 +34,7 @@ TARGET_ALIAS = "target-node"
 
 # Output-folder series tag, bumped per design generation so a new design's runs land in their own
 # folders (e.g. test_3_seed8) and never overwrite or mix with a prior generation's results.
-RUN_SERIES = "test5"
+RUN_SERIES = "test6"
 
 
 def _ensure_exp2_images():
