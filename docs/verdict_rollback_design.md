@@ -235,3 +235,17 @@ verdict에 "replan"을 넣지 않는다. 대신:
 - `scripts/runlog.py` — step `retry_count`/`deadends`, run `covered`.
 - `scripts/run_candidates.py` — gen에 `exclude`(deadend+covered) 인자.
 - (신규) move/fact KIND 정규화 유틸.
+
+---
+
+## 12. 구현 완료 (2026-10-27) — as-built
+
+1단계 구현 완료. 정적검증(py_compile·순수함수 단위·errorfilter 테스트) 통과, **라이브(vLLM/docker) 미검증**. 아래가 실제 동작이며, 앞 §5 의사코드·§11 목록의 "예정/covered/command_kind" 세부는 이 절로 대체된다.
+
+- **verdict 3개**: `run_digest.DIGEST_SCHEMA` enum = RAN_OK/BAD_CMD/BLOCKED. 프롬프트 `plan_user_digest.md` 3-질문 사다리(INFO+EMPTY→RAN_OK, "부재도 사실").
+- **rc 강제** `run_digest._enforce_rc_floor`: 126/127→BLOCKED, **124→BAD_CMD**(타임아웃=명령 축소, method 안 죽임). `_fallback`도 동일.
+- **BAD_CMD 교정**: `run_candidates.fix_command`(+ `prompts/plan_user_cmdfix.md`, 스키마 `{change,cmd}`, temp0.0). 입력=의도3필드 고정 + `{{HISTORY}}`(=이 depth의 `[{cmd,note}]`, note는 그 시도 digest에서 재사용). **{{CMD}}/{{NOTE}}/{{TRIED}} → HISTORY 하나로 통합.** `executor.prepare_one`이 cmd 교체+정적필터 재적용.
+- **BLOCKED**: `executor.dead_methods(cmd, stderr)`가 죽은 프로그램 추출(stderr의 `X: command not found` 우선=루프 내부 도구도 잡음, 없으면 `programs()[0]`) → **run 전역** `method_dead`에 누적 → `run_candidates.gen(exclude=method_dead)`가 STATE에 "UNAVAILABLE" 주입(소프트 억제).
+- **loop.py `run()`**: `mode` GEN/EXEC 상태기계. RAN_OK→depth+1(GEN) / BAD_CMD≤2→fix+prepare_one(EXEC) / 초과→BLOCKED 승격 / BLOCKED→method_dead+`rollback()`(차순위→조상→exhausted). `BAD_CMD_RETRY_MAX=2`. `_make_digest`가 digest 반환. `step.fix_attempts`에 history 적재.
+- **보류(미구현)**: coverage/fact_kind(RAN_OK 반복방지), command_kind 영구 deadend. 실험 후 결정.
+- **라이브 검증 포인트**: ①새 루브릭이 맨정수류를 실제 BAD_CMD로 잡고 note가 구체적인지 ②fix_command가 의도 유지한 채 교정하는지 ③method_dead 소프트억제로 ping 재제안이 줄어드는지.

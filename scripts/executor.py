@@ -144,6 +144,28 @@ def prepare_depth(cands_path, run_path, depth=None, env_label=None, model=None):
     return rl
 
 
+def prepare_one(run_path, depth, candidate_id, new_cmd):
+    """Replace ONE candidate's cmd (after a BAD_CMD fix regenerated it) and re-run the static filter
+    so run.json's filter field matches the new cmd. Execution (execute_one) follows regardless."""
+    run_path = run_path if Path(run_path).is_absolute() else exputil.OUT / run_path
+    rl = runlog.RunLog(run_path)
+    rl._cand(depth, candidate_id)["cmd"] = new_cmd
+    rl.save()
+    ok, reason = errorfilter.is_executable(new_cmd)
+    rl.attach_filter(depth, candidate_id, ok=ok, reason=reason)
+    return rl
+
+
+_NOTFOUND_RE = re.compile(r"([^\s:/]+): command not found")
+
+
+def dead_methods(cmd, stderr):
+    """Program name(s) that could not run, for the run-wide method deadend on BLOCKED. Prefer the
+    shell's own 'X: command not found' (catches a program buried inside a loop, where programs()
+    only sees the loop keyword); else fall back to the primary program word."""
+    return _NOTFOUND_RE.findall(stderr or "") or errorfilter.programs(cmd)[:1]
+
+
 def execute_one(run_path, depth, candidate_id, env_exec=local_env_exec):
     """Execute ONLY the chosen candidate's cmd, record its result, and run the connection
     win-check (sets run.json['solved'] on a confirmed target login)."""

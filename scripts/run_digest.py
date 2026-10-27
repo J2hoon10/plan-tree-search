@@ -15,7 +15,7 @@ DIGEST_SCHEMA = {
   "properties": {
     "intended": {"type": "string"},
     "observed": {"type": "string"},
-    "verdict": {"type": "string", "enum": ["INFO_GAINED", "RAN_BUT_EMPTY", "BAD_CMD", "BLOCKED"]},
+    "verdict": {"type": "string", "enum": ["RAN_OK", "BAD_CMD", "BLOCKED"]},
     "learned": {"type": "string"},
     "note": {"type": "string"},
   },
@@ -38,13 +38,12 @@ def _fallback(c):
     """Code-only digest when the model call fails — verdict inferred from rc alone."""
     ex = c.get("exec", {})
     rc = ex.get("rc")
-    out = (ex.get("stdout") or ex.get("stderr") or "").strip()
-    if rc in (124, 126, 127):
-        verdict, note = "BLOCKED", f"rc={rc}: tool missing or timed out"
-    elif rc == 0 and not out:
-        verdict, note = "RAN_BUT_EMPTY", "rc=0 with no output"
+    if rc in (126, 127):
+        verdict, note = "BLOCKED", f"rc={rc}: program missing or not executable"
+    elif rc == 124:
+        verdict, note = "BAD_CMD", "rc=124: timed out — command too slow, shrink it"
     else:
-        verdict, note = "RAN_BUT_EMPTY", f"rc={rc}; digest model unavailable, raw result kept in run.json"
+        verdict, note = "RAN_OK", f"rc={rc}; digest model unavailable, raw result kept in run.json"
     return {"intended": c.get("objective", ""),
             "observed": f"rc={rc} elapsed={ex.get('elapsed_s')}s",
             "verdict": verdict, "learned": "", "note": note}
@@ -59,17 +58,18 @@ def gen(model, run, depth, candidate_id, seed=1, temp=0.0):
     try:
         obj, _, _ = exputil.post_chat(model, msgs, DIGEST_SCHEMA, "digest",
                                       temp=temp, seed=seed, max_tokens=512)
-        return _enforce_blocked_floor(c, obj)
+        return _enforce_rc_floor(c, obj)
     except Exception as e:  # noqa: BLE001  digest is best-effort; never crash the loop
         print(f"[digest d{depth}] model failed ({e}) -> code fallback", flush=True)
         return _fallback(c)
 
 
-def _enforce_blocked_floor(c, obj):
-    """rc 127/126 (tool missing / not executable) and 124 (timed out) mean the command never
-    really ran -> BLOCKED is a fact, not a judgment call. Force it so the model cannot mislabel
-    these (test5: ping-not-installed was tagged BAD_CMD). Only this one direction is overridden;
-    every other verdict stays the model's call."""
+def _enforce_rc_floor(c, obj):
+    """rc 126/127 (program missing / not executable) => BLOCKED, and rc 124 (timed out) => BAD_CMD
+    are FACTS, not judgment calls — force them so the model can't mislabel (test5: ping-not-installed
+    was tagged BAD_CMD). 124 is BAD_CMD not BLOCKED on purpose: a timeout means the command was too
+    slow (shrink it), NOT that the tool is unavailable, so it must not kill the whole method. Every
+    other verdict stays the model's call."""
     ex = c.get("exec") or {}
     if isinstance(ex, str):
         try:
@@ -78,11 +78,12 @@ def _enforce_blocked_floor(c, obj):
         except Exception:
             ex = {}
     rc = ex.get("rc")
-    if rc in (124, 126, 127) and obj.get("verdict") != "BLOCKED":
-        obj["verdict"] = "BLOCKED"
-        obj["learned"] = ""
-        if not obj.get("note"):
-            obj["note"] = f"rc={rc}: tool missing or timed out (command did not run)"
+    if rc in (126, 127) and obj.get("verdict") != "BLOCKED":
+        obj.update(verdict="BLOCKED", learned="")
+        obj["note"] = obj.get("note") or f"rc={rc}: program missing or not executable"
+    elif rc == 124 and obj.get("verdict") != "BAD_CMD":
+        obj.update(verdict="BAD_CMD", learned="")
+        obj["note"] = obj.get("note") or "rc=124: timed out — command too slow, shrink it"
     return obj
 
 

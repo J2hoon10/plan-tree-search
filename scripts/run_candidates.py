@@ -34,8 +34,34 @@ CANDIDATES_SCHEMA = {
 INITIAL_STATE = ("depth 1 — the mission has just started. No command has been executed yet; nothing "
                  "about current-node or target-node has been observed.")
 
+FIX_SCHEMA = {
+  "type": "object", "additionalProperties": False,
+  "properties": {"change": {"type": "string"}, "cmd": {"type": "string"}},
+  "required": ["change", "cmd"],
+}
 
-def gen(model, out_basename, depth=1, run=None, seed=1, temp=0.7):   # Qwen rec: 0.7/top_p0.8/top_k20
+
+def _render_history(history):
+    """(cmd, note) attempts for {{HISTORY}} in the command-fix prompt, oldest -> newest."""
+    return "\n".join(f"  {i}. $ {h['cmd']}\n     -> wrong: {h.get('note') or '(no detail)'}"
+                     for i, h in enumerate(history, 1))
+
+
+def fix_command(model, run, depth, candidate_id, history, seed=1, temp=0.0):
+    """BAD_CMD recovery: keep the chosen candidate's INTENT (objective/info/precondition), regenerate
+    ONLY its `cmd`. `history` = [{cmd, note}, ...] already tried at this depth, so the fix differs
+    from all of them. Returns the corrected cmd string."""
+    rpath = run if Path(run).is_absolute() else exputil.OUT / run
+    c = runlog.RunLog(rpath)._cand(depth, candidate_id)
+    msgs = [{"role": "system", "content": exputil.render("plan_system", MISSION=exputil.mission())},
+            {"role": "user", "content": exputil.render("plan_user_cmdfix",
+                 OBJECTIVE=c.get("objective", ""), INFO=c.get("info_to_obtain", ""),
+                 PRECONDITION=c.get("precondition", ""), HISTORY=_render_history(history))}]
+    obj, _, _ = exputil.post_chat(model, msgs, FIX_SCHEMA, "cmdfix", temp=temp, seed=seed, max_tokens=512)
+    return obj["cmd"]
+
+
+def gen(model, out_basename, depth=1, run=None, seed=1, temp=0.7, exclude=None):  # Qwen rec: 0.7/top_p0.8/top_k20
     if depth > 1:
         if not run:
             raise SystemExit("--run <run.json> is required for depth > 1")
@@ -43,6 +69,9 @@ def gen(model, out_basename, depth=1, run=None, seed=1, temp=0.7):   # Qwen rec:
         state = runlog.RunLog(rpath).render_state(depth)
     else:
         state = INITIAL_STATE
+    if exclude:        # programs proven unavailable/blocked in this environment -> never propose them
+        state += ("\n\nUNAVAILABLE in this environment (do NOT propose any command using these "
+                  "programs — they are missing or cannot run): " + ", ".join(exclude))
 
     msgs = [{"role": "system", "content": exputil.render("plan_system", MISSION=exputil.mission())},
             {"role": "user", "content": exputil.render("plan_user_candidates", STATE=state)}]
