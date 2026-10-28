@@ -1,7 +1,7 @@
-Look at the CURRENT STATE and choose, from the plan candidates you just proposed, which one is the most appropriate next step to advance the mission. Exactly one candidate will be chosen and run. Using only the CURRENT STATE (the prior steps already taken and their results) and each candidate's own objective / info_to_obtain / command, decide which one to run next. Write the reasoning BEFORE the decision.
+Look at the STEP_HISTORY and choose, from the plan candidates you just proposed, which one is the most appropriate next step to advance the mission. Exactly one candidate will be chosen and run. Using only the STEP_HISTORY (the prior steps already taken and their results) and each candidate's own objective / info_to_obtain / command, decide which one to run next. Write the reasoning BEFORE the decision.
 
-CURRENT STATE (steps already taken on the chosen path, with their results):
-{{STATE}}
+STEP_HISTORY (steps already taken on the chosen path, with their results):
+{{STEP_HISTORY}}
 
 CANDIDATES (proposed at this depth, pending your choice):
 {{CANDIDATES}}

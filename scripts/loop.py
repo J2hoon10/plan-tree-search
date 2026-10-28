@@ -57,7 +57,7 @@ def run(model, run_name, max_steps=40, seed=1, temp=0.7, env_exec=None, env_labe
 
     for it in range(1, max_steps + 1):
         if mode == "GEN":
-            base = f"{stem}_c_d{depth}_i{it}"
+            base = f"{stem}_c_i{it:0{len(str(max_steps))}d}_d{depth}"  # i first + zero-pad -> ls sorts by i
             try:
                 obj = run_candidates.gen(model, base, depth=depth,
                                          run=(run_name if depth > 1 else None),
@@ -102,8 +102,9 @@ def run(model, run_name, max_steps=40, seed=1, temp=0.7, env_exec=None, env_labe
 
         if v == "BAD_CMD":
             cand = rl._cand(depth, chosen)
-            history.append({"cmd": cand["cmd"],
-                            "note": digest.get("note") or digest.get("observed") or "did not do what was intended"})
+            ex = cand.get("exec") or {}            # finding is empty for BAD_CMD, so take the raw result
+            why = (ex.get("stderr") or "").strip() or f"rc={ex.get('rc')}: output did not match intent"
+            history.append({"cmd": cand["cmd"], "note": why})
             st["fix_attempts"] = history; rl.save()
             if len(history) <= BAD_CMD_RETRY_MAX:        # keep the intent, rewrite only the cmd
                 new = run_candidates.fix_command(model, run_name, depth, chosen, history, seed=seed)
@@ -111,7 +112,7 @@ def run(model, run_name, max_steps=40, seed=1, temp=0.7, env_exec=None, env_labe
                 mode = "EXEC"; continue                  # re-run same intent at this depth
             v = "BLOCKED"                                 # out of fixes -> abandon this intent
             d = st["digest"]; d["verdict"] = "BLOCKED"    # record the promotion so run.json matches the loop
-            d["note"] = (d.get("note") or "") + f" [promoted from BAD_CMD: unfixable after {BAD_CMD_RETRY_MAX} tries]"
+            d["finding"] = (d.get("finding") or "") + f" [promoted from BAD_CMD: unfixable after {BAD_CMD_RETRY_MAX} tries]"
             rl.save()
 
         if v == "BLOCKED":

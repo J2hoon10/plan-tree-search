@@ -53,7 +53,7 @@ def rank_depth(run_path, model, depth=None, temp=0.0, seed=1):
 
     msgs = [{"role": "system", "content": exputil.render("plan_system", MISSION=exputil.mission())},
             {"role": "user", "content": exputil.render("rank_candidates",
-                 STATE=rl.render_state(depth), CANDIDATES=render_candidates(cands_ok))}]
+                 STEP_HISTORY=rl.render_state(depth), CANDIDATES=render_candidates(cands_ok))}]
     try:
         out, _, _ = exputil.post_chat(model, msgs, RANK_SCHEMA, "rank",
                                       temp=temp, seed=seed, max_tokens=2048)

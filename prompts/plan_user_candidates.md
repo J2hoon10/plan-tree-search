@@ -1,20 +1,20 @@
-This is one step of your loop. Look at the current state and propose the candidate next steps — the branches of a search tree over the mission. Exactly one candidate will be chosen and executed; its result comes back, and only then do you decide the following step.
+This is one step of your loop. Look at STEP_HISTORY and propose the candidate next steps — the branches of a search tree over the mission.
 
-CURRENT STATE:
-{{STATE}}
+STEP_HISTORY:
+{{STEP_HISTORY}}
 
 Output ONE JSON object with these fields (the <...> text says what each field holds; do not emit the <...> itself):
 
 {
   "depth": <tree level of this step: mission start = root = depth 0, first step = depth 1, +1 for each chosen step>,
-  "is_mission_complete": <DECIDE THIS FIRST, before writing candidates: true if an observed result already shows the mission is done, else false>,
+  "findings": "<read STEP_HISTORY and state in one line what has ALREADY been established — the facts confirmed and the places or tools ruled out. Describe only; do NOT prescribe a next action.>",
+  "is_mission_complete": <DECIDE THIS before writing candidates: true if findings already show the mission is done, else false>,
   "next_step_candidates": [
     {
       "candidate_id": <1-based integer, unique within this step>,
-      "precondition": "<the state this candidate assumes before it runs>",
-      "objective": "<the goal of this step>",
-      "info_to_obtain": "<the one piece of information this step yields>",
-      "cmd": "<the single shell command that yields it>"
+      "objective": "<the information or work still needed to accomplish the mission (not already in findings); the 3 candidates must each pursue a DIFFERENT one>",
+      "info_to_obtain": "<the information you expect this step to yield>",
+      "cmd": "<the single shell command that yields this candidate's info_to_obtain>"
     }
   ]
 }

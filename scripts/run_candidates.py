@@ -1,6 +1,6 @@
 """Candidate generation (plan_tree_search).
-  system = plan_system (+MISSION), user = plan_user_candidates (+STATE).
-STATE:
+  system = plan_system (+MISSION), user = plan_user_candidates (+STEP_HISTORY).
+STEP_HISTORY:
   depth 1      -> fixed initial state (nothing observed yet)
   depth > 1    -> runlog.render_state(depth) from --run <run.json> (the chosen-path trajectory)
 
@@ -17,18 +17,18 @@ CANDIDATES_SCHEMA = {
   "type": "object", "additionalProperties": False,
   "properties": {
     "depth": {"type": "integer"},
+    "findings": {"type": "string"},
     "is_mission_complete": {"type": "boolean"},
     "next_step_candidates": {"type": "array", "minItems": 0, "maxItems": 3, "items": {
       "type": "object", "additionalProperties": False,
       "properties": {
         "candidate_id": {"type": "integer"},
-        "precondition": {"type": "string"},
         "objective": {"type": "string"},
         "info_to_obtain": {"type": "string"},
         "cmd": {"type": "string"}},
-      "required": ["candidate_id", "precondition", "objective", "info_to_obtain", "cmd"]}},
+      "required": ["candidate_id", "objective", "info_to_obtain", "cmd"]}},
   },
-  "required": ["depth", "is_mission_complete", "next_step_candidates"],
+  "required": ["depth", "findings", "is_mission_complete", "next_step_candidates"],
 }
 
 INITIAL_STATE = ("depth 1 — the mission has just started. No command has been executed yet; nothing "
@@ -48,15 +48,15 @@ def _render_history(history):
 
 
 def fix_command(model, run, depth, candidate_id, history, seed=1, temp=0.0):
-    """BAD_CMD recovery: keep the chosen candidate's INTENT (objective/info/precondition), regenerate
+    """BAD_CMD recovery: keep the chosen candidate's INTENT (objective/info_to_obtain), regenerate
     ONLY its `cmd`. `history` = [{cmd, note}, ...] already tried at this depth, so the fix differs
     from all of them. Returns the corrected cmd string."""
     rpath = run if Path(run).is_absolute() else exputil.OUT / run
     c = runlog.RunLog(rpath)._cand(depth, candidate_id)
     msgs = [{"role": "system", "content": exputil.render("plan_system", MISSION=exputil.mission())},
             {"role": "user", "content": exputil.render("plan_user_cmdfix",
-                 OBJECTIVE=c.get("objective", ""), INFO=c.get("info_to_obtain", ""),
-                 PRECONDITION=c.get("precondition", ""), HISTORY=_render_history(history))}]
+                 OBJECTIVE=c.get("objective", ""), INFO_TO_OBTAIN=c.get("info_to_obtain", ""),
+                 HISTORY=_render_history(history))}]
     obj, _, _ = exputil.post_chat(model, msgs, FIX_SCHEMA, "cmdfix", temp=temp, seed=seed, max_tokens=512)
     return obj["cmd"]
 
@@ -74,7 +74,7 @@ def gen(model, out_basename, depth=1, run=None, seed=1, temp=0.7, exclude=None):
                   "programs — they are missing or cannot run): " + ", ".join(exclude))
 
     msgs = [{"role": "system", "content": exputil.render("plan_system", MISSION=exputil.mission())},
-            {"role": "user", "content": exputil.render("plan_user_candidates", STATE=state)}]
+            {"role": "user", "content": exputil.render("plan_user_candidates", STEP_HISTORY=state)}]
     obj, raw, finish = exputil.post_chat(model, msgs, CANDIDATES_SCHEMA, "cand",
                                          temp=temp, seed=seed, max_tokens=2048)
 

@@ -1,0 +1,44 @@
+flowchart LR
+    S1["1 · 모델<br/>후보 생성 · 서로 다른 3개<br/>(죽은 KIND + 확인끝난 KIND 제외)"]
+    S2["2 · 시스템<br/>실행 가능 형태 검사"]
+    S3["3 · 모델<br/>순위 매겨 1개 선택"]
+    S4["4 · 시스템<br/>선택 1개 실행 · 연결 확인"]
+    S5["5 · 모델<br/>결과 요약 (digest) → verdict 산출"]
+    V{"verdict?"}
+    S6["6 · 시스템<br/>연결 성공 최종 채점"]
+
+    subgraph RESOLVE["롤백 · 후보 선택 (verdict 처리)"]
+        direction TB
+        BADQ{"BAD_CMD<br/>재시도 상한 내?"}
+        FIX["모델<br/>명령만 교정(의도 고정) + 재검사"]
+        SIB{"현재 depth에<br/>미시도 계획 후보 있나?"}
+        ANC{"조상에<br/>미시도 계획 후보 있나?"}
+        BADQ -- "예 · 상한 내" --> FIX
+        BADQ -- "아니오 · 상한 초과 → BLOCKED 승격" --> SIB
+        SIB -- "아니오" --> ANC
+    end
+
+    S1 --> S2 --> S3 --> S4 --> S5 --> V
+    S1 -. "미션완료 주장" .-> S6
+
+    V -- "RAN_OK<br/>사실 기록 · coverage+ · depth +1" --> S1
+    V -- "BAD_CMD" --> BADQ
+    V -- "BLOCKED" --> SIB
+
+    FIX -- "재실행" --> S4
+    SIB -- "예 · 차순위 계획 후보 실행" --> S4
+    ANC -- "예 · 조상 계획 후보 실행" --> S4
+    ANC -- "아니오 · 루트까지 소진 = 후보고갈" --> S6
+
+    S3 -. "선택 불가 (실행가능 후보 0 · 또는 랭크 실패) → 롤백" .-> SIB
+
+    classDef model fill:#e9eeff,stroke:#3a5bd0,color:#1b2027;
+    classDef system fill:#eef1f5,stroke:#818b99,color:#1b2027;
+    classDef new fill:#fff2cc,stroke:#d6a500,color:#1b2027;
+    class S1,S3,S5 model;
+    class S2,S4,S6 system;
+    class V,BADQ,FIX,SIB,ANC new;
+
+    linkStyle 0,13,14 stroke:#1f9d55,stroke-width:2px;
+    linkStyle 1,2,15 stroke:#d33a3a,stroke-width:2px;
+    linkStyle 3,4,5,6,7,8,9,10,11,12,16 stroke:#3a5bd0,stroke-width:2px;

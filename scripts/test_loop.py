@@ -23,14 +23,14 @@ import exputil, loop  # noqa: E402
 
 CANDS = [
     {"depth": 1, "is_mission_complete": False, "next_step_candidates": [
-        {"candidate_id": 1, "precondition": "p", "objective": "o1", "info_to_obtain": "i", "cmd": "echo d1c1"},
-        {"candidate_id": 2, "precondition": "p", "objective": "o1b", "info_to_obtain": "i", "cmd": "echo d1c2"}]},
+        {"candidate_id": 1, "objective": "o1", "info_to_obtain": "i", "cmd": "echo d1c1"},
+        {"candidate_id": 2, "objective": "o1b", "info_to_obtain": "i", "cmd": "echo d1c2"}]},
     {"depth": 2, "is_mission_complete": False, "next_step_candidates": [
-        {"candidate_id": 1, "precondition": "p", "objective": "o2", "info_to_obtain": "i", "cmd": "echo d2c1bad"},
-        {"candidate_id": 2, "precondition": "p", "objective": "o2b", "info_to_obtain": "i", "cmd": "echo d2sib"}]},
+        {"candidate_id": 1, "objective": "o2", "info_to_obtain": "i", "cmd": "echo d2c1bad"},
+        {"candidate_id": 2, "objective": "o2b", "info_to_obtain": "i", "cmd": "echo d2sib"}]},
     {"depth": 3, "is_mission_complete": False, "next_step_candidates": [
-        {"candidate_id": 1, "precondition": "p", "objective": "o3", "info_to_obtain": "i", "cmd": "echo NEEDS_PING"},
-        {"candidate_id": 2, "precondition": "p", "objective": "o3b", "info_to_obtain": "i", "cmd": "echo d3sib"}]},
+        {"candidate_id": 1, "objective": "o3", "info_to_obtain": "i", "cmd": "echo NEEDS_PING"},
+        {"candidate_id": 2, "objective": "o3b", "info_to_obtain": "i", "cmd": "echo d3sib"}]},
     {"depth": 4, "is_mission_complete": True, "next_step_candidates": []},
 ]
 # one verdict per execution, in order (entry 6 is the ping step: _enforce_rc_floor forces BLOCKED, so its value is ignored)
@@ -45,7 +45,7 @@ def fake_post_chat(model, messages, schema, name, **kw):
     elif name == "rank":
         obj = {"ranking": [{"candidate_id": 1}, {"candidate_id": 2}], "ranking_analysis": "t"}
     elif name == "digest":
-        obj = {"intended": "t", "observed": "o", "verdict": DIGESTS[n["digest"]], "learned": "l", "note": "n"}
+        obj = {"verdict": DIGESTS[n["digest"]], "finding": "f"}
         n["digest"] += 1
     elif name == "cmdfix":
         obj = {"change": "c", "cmd": FIXES[n["cmdfix"]]}; n["cmdfix"] += 1

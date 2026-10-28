@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 LOG_MAX = 4000        # chars of RAW stdout/stderr stored per cmd in run.json (for debugging)
-STATE_STEP_MAX = 600  # chars of result shown PER STEP in {{STATE}} (context-length control)
+STATE_STEP_MAX = 600  # chars of result shown PER STEP in {{STEP_HISTORY}} (context-length control)
 
 
 def _trunc(s: str, n: int = LOG_MAX) -> str:
@@ -20,7 +20,7 @@ def _trunc(s: str, n: int = LOG_MAX) -> str:
 
 
 def _clip(s: str, n: int = STATE_STEP_MAX) -> str:
-    """Head+tail clip for {{STATE}} rendering — keeps the start AND end of long output."""
+    """Head+tail clip for {{STEP_HISTORY}} rendering — keeps the start AND end of long output."""
     s = (s or "").strip()
     if len(s) <= n:
         return s
@@ -166,7 +166,7 @@ class RunLog:
         return out
 
     def render_state(self, next_depth):
-        """{{STATE}} for generating depth `next_depth`: the FULL chosen-path trajectory as a
+        """{{STEP_HISTORY}} for generating depth `next_depth`: the FULL chosen-path trajectory as a
         cumulative list of per-step DIGESTS (distilled after each step ran). Each prior step
         contributes its digest (intended/observed/verdict + learned|note) instead of raw output,
         so the whole history of what was tried and learned is preserved while staying compact.
@@ -185,11 +185,7 @@ class RunLog:
                 continue
             line = (f"[d{s['depth']}] intended: {d.get('intended', '')} · "
                     f"verdict: {d.get('verdict', '')}")
-            if d.get("observed"):
-                line += f"\n      observed: {d['observed']}"
-            if d.get("learned"):
-                line += f"\n      learned: {d['learned']}"
-            elif d.get("note"):
-                line += f"\n      note: {d['note']}"
+            if d.get("finding"):
+                line += f"\n      finding: {d['finding']}"
             lines.append(line)
         return "\n".join(lines)

@@ -27,6 +27,14 @@ out/                        # 생성 산출물(plan/candidate json, 비교 md �
 - 후보 생성은 라이브러리 의존 없음(httpx만): `python scripts/run_candidates.py qwen3-4b <out_basename>`
 
 ## 탐색 루프 설계 (합의안: 에러필터 → 랭킹 → best-first → 순위 롤백)
+
+### 루프 흐름 (verdict 기반 롤백)
+![planner flow](docs/planner-flow.png)
+
+파랑=모델 호출, 회색=시스템(결정론), 노랑=verdict 처리/롤백. digest가 산출한
+`RAN_OK | BAD_CMD | BLOCKED` verdict로 전진/명령교정/후보롤백을 가른다.
+소스: [`docs/planner-flow.mmd`](docs/planner-flow.mmd) (Mermaid).
+
 1. **에러필터(결정론)**: 각 후보 cmd 실행 → malformed/실행실패는 컷(ssh의 rc≠0은 에러분류로 보존).
 2. **랭킹(모델 상대평가)**: 통과 후보를 모델이 "목적 vs 실행결과"로 상대 순위.
 3. **best-first 확장**: 1등 후보 상태 기준으로 다음 depth 후보 생성(trajectory 주입).

@@ -1,5 +1,5 @@
 """Digest generation (plan-tree-search, component 4): after a step's chosen command runs,
-distill its result into a compact per-step record (intended/observed/verdict/learned/note)
+distill its result into a compact per-step record (verdict + finding)
 that future STATE renders use in PLACE of raw output. Input = the ONE step just run.
 
 verdict is an enum; a model/parse failure falls back to a code-only digest (verdict inferred
@@ -13,40 +13,38 @@ import exputil, runlog
 DIGEST_SCHEMA = {
   "type": "object", "additionalProperties": False,
   "properties": {
-    "intended": {"type": "string"},
-    "observed": {"type": "string"},
     "verdict": {"type": "string", "enum": ["RAN_OK", "BAD_CMD", "BLOCKED"]},
-    "learned": {"type": "string"},
-    "note": {"type": "string"},
+    "finding": {"type": "string"},
   },
-  "required": ["intended", "observed", "verdict", "learned", "note"],
+  "required": ["verdict", "finding"],
 }
+# `intended` is NOT a model field: gen() sets it to the step's objective after the call.
 
 
 def _render_step(c):
     """The ONE step just run, rendered as {{STEP}} for the digest prompt."""
     ex = c.get("exec", {})
-    out = ex.get("stdout") or ex.get("stderr") or "(no output)"
-    return (f"plan: {c.get('objective', '')}\n"
-            f"info sought: {c.get('info_to_obtain', '')}\n"
+    parts = [f"[{k}]\n{ex[k]}" for k in ("stdout", "stderr") if (ex.get(k) or "").strip()]
+    out = "\n".join(parts) or "(no output)"
+    return (f"objective: {c.get('objective', '')}\n"
+            f"info_to_obtain: {c.get('info_to_obtain', '')}\n"
             f"$ {c.get('cmd', '')}\n"
-            f"result: rc={ex.get('rc')} elapsed={ex.get('elapsed_s')}s\n"
-            f"{runlog._clip(out)}")
+            f"exec: rc={ex.get('rc')} elapsed={ex.get('elapsed_s')}s\n"
+            f"{out}")
 
 
 def _fallback(c):
-    """Code-only digest when the model call fails — verdict inferred from rc alone."""
+    """Code-only digest when the model call fails — verdict inferred from rc alone. `intended` is
+    added by gen() (= the step's objective), so it is not set here."""
     ex = c.get("exec", {})
     rc = ex.get("rc")
     if rc in (126, 127):
-        verdict, note = "BLOCKED", f"rc={rc}: program missing or not executable"
+        verdict, finding = "BLOCKED", f"rc={rc}: program missing or not executable"
     elif rc == 124:
-        verdict, note = "BAD_CMD", "rc=124: timed out — command too slow, shrink it"
+        verdict, finding = "BAD_CMD", ""           # BAD_CMD records no finding
     else:
-        verdict, note = "RAN_OK", f"rc={rc}; digest model unavailable, raw result kept in run.json"
-    return {"intended": c.get("objective", ""),
-            "observed": f"rc={rc} elapsed={ex.get('elapsed_s')}s",
-            "verdict": verdict, "learned": "", "note": note}
+        verdict, finding = "RAN_OK", f"rc={rc}; digest model unavailable, raw result in run.json"
+    return {"verdict": verdict, "finding": finding}
 
 
 def gen(model, run, depth, candidate_id, seed=1, temp=0.0):
@@ -58,10 +56,12 @@ def gen(model, run, depth, candidate_id, seed=1, temp=0.0):
     try:
         obj, _, _ = exputil.post_chat(model, msgs, DIGEST_SCHEMA, "digest",
                                       temp=temp, seed=seed, max_tokens=512)
-        return _enforce_rc_floor(c, obj)
+        obj = _enforce_rc_floor(c, obj)
     except Exception as e:  # noqa: BLE001  digest is best-effort; never crash the loop
         print(f"[digest d{depth}] model failed ({e}) -> code fallback", flush=True)
-        return _fallback(c)
+        obj = _fallback(c)
+    obj["intended"] = c.get("objective", "")        # intended = the step's objective (not model-generated)
+    return obj
 
 
 def _enforce_rc_floor(c, obj):
@@ -79,11 +79,11 @@ def _enforce_rc_floor(c, obj):
             ex = {}
     rc = ex.get("rc")
     if rc in (126, 127) and obj.get("verdict") != "BLOCKED":
-        obj.update(verdict="BLOCKED", learned="")
-        obj["note"] = obj.get("note") or f"rc={rc}: program missing or not executable"
+        obj["verdict"] = "BLOCKED"                  # tool unusable -> finding records which tool
+        obj["finding"] = obj.get("finding") or f"rc={rc}: program missing or not executable"
     elif rc == 124 and obj.get("verdict") != "BAD_CMD":
-        obj.update(verdict="BAD_CMD", learned="")
-        obj["note"] = obj.get("note") or "rc=124: timed out — command too slow, shrink it"
+        obj["verdict"] = "BAD_CMD"                  # too slow -> command rewritten, no finding
+        obj["finding"] = ""
     return obj
 
 

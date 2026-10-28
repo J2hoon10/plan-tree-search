@@ -1,18 +1,13 @@
-You ran a command for a goal, but it did NOT do what you intended — the goal is still unmet. Keep the SAME goal; rewrite ONLY the command so it actually does it.
+The command did not run as the selected plan intended. Keep that intent and rewrite ONLY the command so it carries out the intent.
 
-GOAL (do not change):
-  objective:    {{OBJECTIVE}}
-  info sought:  {{INFO}}
-  precondition: {{PRECONDITION}}
+PLAN INTENT TO SATISFY:
+  objective:       {{OBJECTIVE}}
+  info_to_obtain:  {{INFO_TO_OBTAIN}}
 
-Commands you already tried for this goal, and why each was wrong (oldest -> newest):
+Below are the commands you already tried for this intent, with the reason each one was wrong, ordered from oldest to newest:
 {{HISTORY}}
 
-Fix the CAUSE, not the surface: if a substituted value was the WRONG KIND (an address shown as a
-bare number like `10` instead of a full dotted address `10.x.x.x`, a path fragment instead of a
-full path, ...), put the real value; if a range / variable did not expand, write it so it does; if
-it timed out, make it smaller / faster. Your new command MUST DIFFER from every one already tried
-above. Do NOT change the goal.
+Fix the CAUSE, not the surface: if a substituted value was the WRONG KIND (a fragment where the full value was needed, or the right content in the wrong form), put the value you actually observed — and if you have not observed it yet, make the new command OBSERVE it rather than guess another; if a range / variable did not expand, write it so it does; if it timed out, make it smaller / faster. Your new command MUST DIFFER from every one already tried above.
 
 Output ONE JSON object, nothing else:
 {
